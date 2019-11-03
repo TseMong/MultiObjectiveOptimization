@@ -1,6 +1,6 @@
 import sys
 import torch
-import click
+import argparse
 import json
 import datetime
 from timeit import default_timer as timer
@@ -18,7 +18,7 @@ import types
 from tqdm import tqdm
 from tensorboardX import SummaryWriter
 
-from models.gradient_scaler import MinNormElement
+#from models.gradient_scaler import MinNormElement
 import losses
 import datasets
 import metrics
@@ -27,26 +27,35 @@ from min_norm_solvers import MinNormSolver, gradient_normalizers
 
 NUM_EPOCHS = 100
 
-@click.command()
-@click.option('--param_file', default='params.json', help='JSON parameters file')
-def train_multi_task(param_file):
+# @click.command()
+# @click.option('--param_file', default='./sample.json', help='JSON parameters file')
+parser = argparse.ArgumentParser(description='Multi-Objective Optimization: CelebA')
+parser.add_argument('--param_file', default='./sample.json', type=str, help='JSON parameters file')
+opt = parser.parse_args()
+
+def train_multi_task():
     with open('configs.json') as config_params:
         configs = json.load(config_params)
 
-    with open(param_file) as json_params:
+    with open(opt.param_file) as json_params:
         params = json.load(json_params)
 
 
     exp_identifier = []
+    log_dir_name = ''
     for (key, val) in params.items():
         if 'tasks' in key:
             continue
+        elif 'scales' not in key:
+            log_dir_name += str(val) + '_'
+        else:
+            pass
         exp_identifier+= ['{}={}'.format(key,val)]
+
 
     exp_identifier = '|'.join(exp_identifier)
     params['exp_id'] = exp_identifier
-
-    writer = SummaryWriter(log_dir='runs/{}_{}'.format(params['exp_id'], datetime.datetime.now().strftime("%I:%M%p on %B %d, %Y")))
+    writer = SummaryWriter(log_dir='runs/{}_{}'.format(log_dir_name[:-1], datetime.datetime.now().strftime("%I:%M%p on %B %d, %Y")))
 
     train_loader, train_dst, val_loader, val_dst = datasets.get_dataset(params, configs)
     loss_fn = losses.get_loss(params)
@@ -114,8 +123,9 @@ def train_multi_task(param_file):
                 if approximate_norm_solution:
                     optimizer.zero_grad()
                     # First compute representations (z)
-                    images_volatile = Variable(images.data, volatile=True)
-                    rep, mask = model['rep'](images_volatile, mask)
+                    with torch.no_grad():
+                        images_volatile = Variable(images.data)
+                        rep, mask = model['rep'](images_volatile, mask)
                     # As an approximate solution we only need gradients for input
                     if isinstance(rep, list):
                         # This is a hack to handle psp-net
@@ -130,7 +140,11 @@ def train_multi_task(param_file):
                     for t in tasks:
                         optimizer.zero_grad()
                         out_t, masks[t] = model[t](rep_variable, None)
+                        print(out_t.shape)
                         loss = loss_fn[t](out_t, labels[t])
+                        print(type(loss))
+                        print(loss.shape)
+                        exit()
                         loss_data[t] = loss.data[0]
                         loss.backward()
                         grads[t] = []
@@ -242,4 +256,5 @@ def train_multi_task(param_file):
 
 
 if __name__ == '__main__':
+    #param_file = './sample.json'
     train_multi_task()

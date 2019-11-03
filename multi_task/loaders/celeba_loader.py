@@ -28,17 +28,18 @@ class CELEBA(data.Dataset):
         self.files = {}
         self.labels = {}
 
-        self.label_file = self.root+"/Anno/list_attr_celeba.txt"
+        self.label_file = os.path.join(self.root, 'Anno/list_attr_celeba.txt')
         label_map = {}
         with open(self.label_file, 'r') as l_file:
             labels = l_file.read().split('\n')[2:-1]
         for label_line in labels:
-            f_name = re.sub('jpg', 'png', label_line.split(' ')[0])
+            #f_name = re.sub('jpg', 'png', label_line.split(' ')[0])    # our img is not png
+            f_name = label_line.split(' ')[0]
             label_txt = list(map(lambda x:int(x), re.sub('-1','0',label_line).split()[1:]))
             label_map[f_name]=label_txt
 
-        self.all_files = glob.glob(self.root+'/Img/img_align_celeba_png/*.png')
-        with open(root+'//Eval/list_eval_partition.txt', 'r') as f:
+        self.all_files = glob.glob(self.root+'/Img/*.jpg')
+        with open(os.path.join(root, 'Eval/list_eval_partition.txt'), 'r') as f:
             fl = f.read().split('\n')
             fl.pop()
             if 'train' in self.split:
@@ -47,7 +48,8 @@ class CELEBA(data.Dataset):
                 selected_files =  list(filter(lambda x:x.split(' ')[1]=='1', fl))
             elif 'test' in self.split:
                 selected_files =  list(filter(lambda x:x.split(' ')[1]=='2', fl))
-            selected_file_names = list(map(lambda x:re.sub('jpg', 'png', x.split(' ')[0]), selected_files))
+            #selected_file_names = list(map(lambda x:re.sub('jpg', 'png', x.split(' ')[0]), selected_files))
+            selected_file_names = list(map(lambda x:x.split(' ')[0], selected_files))
         
         base_path = '/'.join(self.all_files[0].split('/')[:-1])
         self.files[self.split] = list(map(lambda x: '/'.join([base_path, x]), set(map(lambda x:x.split('/')[-1], self.all_files)).intersection(set(selected_file_names))))
@@ -102,28 +104,4 @@ class CELEBA(data.Dataset):
         return img
 
 if __name__ == '__main__':
-    import torchvision
-    import matplotlib.pyplot as plt
-
-
-    local_path = 'CELEB_A_PATH'
-    dst = CELEBA(local_path, is_transform=True, augmentations=None)
-    bs = 4
-    trainloader = data.DataLoader(dst, batch_size=bs, num_workers=0)
-
-    for i, data in enumerate(trainloader):
-        imgs = imgs.numpy()[:, ::-1, :, :]
-        imgs = np.transpose(imgs, [0,2,3,1])
-
-        f, axarr = plt.subplots(bs,4)
-        for j in range(bs):
-            axarr[j][0].imshow(imgs[j])
-            axarr[j][1].imshow(dst.decode_segmap(labels.numpy()[j]))
-            axarr[j][2].imshow(instances[j,0,:,:])
-            axarr[j][3].imshow(instances[j,1,:,:])
-        plt.show()
-        a = raw_input()
-        if a == 'ex':
-            break
-        else:
-            plt.close()
+    pass
