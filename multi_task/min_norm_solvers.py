@@ -33,7 +33,7 @@ class MinNormSolver:
         """
         Find the minimum norm solution as combination of two points
         This is correct only in 2D
-        ie. min_c |\sum c_i x_i|_2^2 st. \sum c_i = 1 , 1 >= c_1 >= 0 for all i, c_i + c_j = 1.0 for some i, j
+        ie. min_c |\sum c_i x_i|_2^2 st. \sum c_i = 1 , 1 >= c_i >= 0 for all i, c_i + c_j = 1.0 for some i, j
         """
         dmin = 1e8
         for i in range(len(vecs)):
@@ -41,16 +41,16 @@ class MinNormSolver:
                 if (i,j) not in dps:
                     dps[(i, j)] = 0.0
                     for k in range(len(vecs[i])):
-                        dps[(i,j)] += torch.dot(vecs[i][k], vecs[j][k]).data[0]
+                        dps[(i,j)] += torch.dot(vecs[i][k].flatten(), vecs[j][k].flatten()).data.item()
                     dps[(j, i)] = dps[(i, j)]
                 if (i,i) not in dps:
                     dps[(i, i)] = 0.0
                     for k in range(len(vecs[i])):
-                        dps[(i,i)] += torch.dot(vecs[i][k], vecs[i][k]).data[0]
+                        dps[(i,i)] += torch.dot(vecs[i][k].flatten(), vecs[i][k].flatten()).data.item()
                 if (j,j) not in dps:
                     dps[(j, j)] = 0.0   
                     for k in range(len(vecs[i])):
-                        dps[(j, j)] += torch.dot(vecs[j][k], vecs[j][k]).data[0]
+                        dps[(j, j)] += torch.dot(vecs[j][k].flatten(), vecs[j][k].flatten()).data.item()
                 c,d = MinNormSolver._min_norm_element_from2(dps[(i,i)], dps[(i,j)], dps[(j,j)])
                 if d < dmin:
                     dmin = d
@@ -98,7 +98,7 @@ class MinNormSolver:
         """
         # Solution lying at the combination of two points
         dps = {}
-        init_sol, dps = MinNormSolver._min_norm_2d(vecs, dps)
+        init_sol, dps = MinNormSolver._min_norm_2d(vecs, dps) # init_sol = [(i,j),c,d]
         
         n=len(vecs)
         sol_vec = np.zeros(n)
@@ -107,7 +107,7 @@ class MinNormSolver:
 
         if n < 3:
             # This is optimal for n=2, so return the solution
-            return sol_vec , init_sol[2]
+            return sol_vec, init_sol[2]
     
         iter_count = 0
 
@@ -190,7 +190,7 @@ def gradient_normalizers(grads, losses, normalization_type):
             gn[t] = losses[t]
     elif normalization_type == 'loss+':
         for t in grads:
-            gn[t] = losses[t] * np.sqrt(np.sum([gr.pow(2).sum().data[0] for gr in grads[t]]))
+            gn[t] = losses[t] * np.sqrt(np.sum([gr.pow(2).sum().data.item() for gr in grads[t]]))
     elif normalization_type == 'none':
         for t in grads:
             gn[t] = 1.0

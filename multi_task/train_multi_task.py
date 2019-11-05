@@ -2,7 +2,7 @@ import sys
 import torch
 import argparse
 import json
-import datetime
+import datetime, time, os
 from timeit import default_timer as timer
 
 import numpy as np
@@ -31,7 +31,10 @@ NUM_EPOCHS = 100
 # @click.option('--param_file', default='./sample.json', help='JSON parameters file')
 parser = argparse.ArgumentParser(description='Multi-Objective Optimization: CelebA')
 parser.add_argument('--param_file', default='./sample.json', type=str, help='JSON parameters file')
+parser.add_argument('--gpu', default= '1', type=str, help='Which gpu want to use.')
+
 opt = parser.parse_args()
+os.environ["CUDA_VISIBLE_DEVICES"] = opt.gpu
 
 def train_multi_task():
     with open('configs.json') as config_params:
@@ -55,7 +58,7 @@ def train_multi_task():
 
     exp_identifier = '|'.join(exp_identifier)
     params['exp_id'] = exp_identifier
-    writer = SummaryWriter(log_dir='runs/{}_{}'.format(log_dir_name[:-1], datetime.datetime.now().strftime("%I:%M%p on %B %d, %Y")))
+    writer = SummaryWriter(log_dir='runs/{}_{}'.format(log_dir_name[:-1], datetime.datetime.now().strftime("%I_%M%p_on_%B_%d,%Y")))
 
     train_loader, train_dst, val_loader, val_dst = datasets.get_dataset(params, configs)
     loss_fn = losses.get_loss(params)
@@ -97,7 +100,7 @@ def train_multi_task():
         for m in model:
             model[m].train()
 
-        for batch in train_loader:
+        for batch in tqdm(train_loader):
             n_iter += 1
             # First member is always images
             images = batch[0]
@@ -135,17 +138,13 @@ def train_multi_task():
                     else:
                         rep_variable = Variable(rep.data.clone(), requires_grad=True)
                         list_rep = False
-
+                    
                     # Compute gradients of each loss function wrt z
                     for t in tasks:
                         optimizer.zero_grad()
                         out_t, masks[t] = model[t](rep_variable, None)
-                        print(out_t.shape)
                         loss = loss_fn[t](out_t, labels[t])
-                        print(type(loss))
-                        print(loss.shape)
-                        exit()
-                        loss_data[t] = loss.data[0]
+                        loss_data[t] = loss.data.item()
                         loss.backward()
                         grads[t] = []
                         if list_rep:
@@ -162,7 +161,7 @@ def train_multi_task():
                         rep, mask = model['rep'](images, mask)
                         out_t, masks[t] = model[t](rep, None)
                         loss = loss_fn[t](out_t, labels[t])
-                        loss_data[t] = loss.data[0]
+                        loss_data[t] = loss.data.item()
                         loss.backward()
                         grads[t] = []
                         for param in model['rep'].parameters():
@@ -190,7 +189,7 @@ def train_multi_task():
             for i, t in enumerate(tasks):
                 out_t, _ = model[t](rep, masks[t])
                 loss_t = loss_fn[t](out_t, labels[t])
-                loss_data[t] = loss_t.data[0]
+                loss_data[t] = loss_t.data.item()
                 if i > 0:
                     loss = loss + scale[t]*loss_t
                 else:
@@ -198,7 +197,7 @@ def train_multi_task():
             loss.backward()
             optimizer.step()
 
-            writer.add_scalar('training_loss', loss.data[0], n_iter)
+            writer.add_scalar('training_loss', loss.data.item(), n_iter)
             for t in tasks:
                 writer.add_scalar('training_loss_{}'.format(t), loss_data[t], n_iter)
 
@@ -214,21 +213,23 @@ def train_multi_task():
 
         num_val_batches = 0
         for batch_val in val_loader:
-            val_images = Variable(batch_val[0].cuda(), volatile=True)
+            with torch.no_grad():
+                val_images = Variable(batch_val[0].cuda())
             labels_val = {}
 
             for i, t in enumerate(all_tasks):
                 if t not in tasks:
                     continue
                 labels_val[t] = batch_val[i+1]
-                labels_val[t] = Variable(labels_val[t].cuda(), volatile=True)
+                with torch.no_grad():
+                    labels_val[t] = Variable(labels_val[t].cuda())
 
             val_rep, _ = model['rep'](val_images, None)
             for t in tasks:
                 out_t_val, _ = model[t](val_rep, None)
                 loss_t = loss_fn[t](out_t_val, labels_val[t])
-                tot_loss['all'] += loss_t.data[0]
-                tot_loss[t] += loss_t.data[0]
+                tot_loss['all'] += loss_t.data.item()
+                tot_loss[t] += loss_t.data.item()
                 metric[t].update(out_t_val, labels_val[t])
             num_val_batches+=1
 
@@ -249,7 +250,7 @@ def train_multi_task():
                 key_name = 'model_{}'.format(t)
                 state[key_name] = model[t].state_dict()
 
-            torch.save(state, "saved_models/{}_{}_model.pkl".format(params['exp_id'], epoch+1))
+            torch.save(state, "saved_models/{}_{}_model.pkl".format(log_dir_name[:-1], epoch+1))
 
         end = timer()
         print('Epoch ended in {}s'.format(end - start))
