@@ -249,9 +249,9 @@ def train_multi_task():
             for t in tasks:
                 key_name = 'model_{}'.format(t)
                 state[key_name] = model[t].state_dict()
-
+            if not os.path.exists('saved_models'):
+                os.mkdir('saved_models')
             torch.save(state, "saved_models/{}_{}_model.pkl".format(log_dir_name[:-1], epoch+1))
-
         end = timer()
         print('Epoch ended in {}s'.format(end - start))
 
